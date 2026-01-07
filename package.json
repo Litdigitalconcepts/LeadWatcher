@@ -1,0 +1,20 @@
+{
+  "name": "antigravity",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "ingest:rss": "node LeadWatcher/src/ingestion/rss_fetch.mjs",
+    "analyze:lead": "node LeadWatcher/src/enrichment/analyze_lead.mjs",
+    "pipeline:daily": "node --env-file=LeadWatcher/.env LeadWatcher/src/pipelines/enrich_and_store.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
+    "dotenv": "^17.2.3",
+    "rss-parser": "^3.13.0"
+  }
+}

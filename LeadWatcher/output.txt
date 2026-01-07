@@ -1,0 +1,22 @@
+﻿
+===== RAW LLM OUTPUT START =====
+
+{
+  "company": "Vercel",
+  "amount": "40000000",
+  "sentiment": "positive",
+  "event_type": "funding"
+}
+
+===== RAW LLM OUTPUT END =====
+
+FINAL funding_amount to insert: 40000000
+Input headline: Vercel raises $40M
+Extracted JSON:
+{
+  "company": "Vercel",
+  "amount": "40000000",
+  "funding_amount": 40000000,
+  "sentiment": "positive",
+  "event_type": "funding"
+}
