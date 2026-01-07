@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "ingest:rss": "node LeadWatcher/src/ingestion/rss_fetch.mjs",
     "analyze:lead": "node LeadWatcher/src/enrichment/analyze_lead.mjs",
-    "pipeline:daily": "node --env-file=LeadWatcher/.env LeadWatcher/src/pipelines/enrich_and_store.mjs"
+    "pipeline:daily": "node --env-file=LeadWatcher/.env LeadWatcher/src/pipelines/enrich_and_store.mjs",
+    "lint": "eslint ."
   },
   "keywords": [],
   "author": "",
@@ -16,5 +17,10 @@
     "@supabase/supabase-js": "^2.89.0",
     "dotenv": "^17.2.3",
     "rss-parser": "^3.13.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "eslint": "^9.39.2",
+    "globals": "^17.0.0"
   }
 }
