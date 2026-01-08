@@ -53,7 +53,7 @@ async function retrySupabaseOp(fn) {
 export async function runPipeline() {
     console.log("🔁 Pipeline starting...");
 
-    const { data, error } = await retrySupabaseOp(() =>
+    const { error } = await retrySupabaseOp(() =>
         supabase.from("leads").select("id").limit(1)
     );
     if (error) {

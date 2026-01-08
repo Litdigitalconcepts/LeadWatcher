@@ -43,7 +43,9 @@ function extractJsonObject(text) {
     // Try direct parse first
     try {
         return JSON.parse(unfenced);
-    } catch { }
+    } catch {
+        // Intentionally empty - we'll try the fallback regex approach
+    }
 
     // Fallback: grab the first {...} block
     const match = unfenced.match(/\{[\s\S]*\}/);
