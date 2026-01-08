@@ -8,7 +8,8 @@
     "ingest:rss": "node LeadWatcher/src/ingestion/rss_fetch.mjs",
     "analyze:lead": "node LeadWatcher/src/enrichment/analyze_lead.mjs",
     "pipeline:daily": "node --env-file=LeadWatcher/.env LeadWatcher/src/pipelines/enrich_and_store.mjs",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "eslint": "^9.39.2",
-    "globals": "^17.0.0"
+    "globals": "^17.0.0",
+    "husky": "^9.1.7"
   }
 }
