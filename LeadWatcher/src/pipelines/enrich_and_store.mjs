@@ -134,8 +134,21 @@ export async function runPipeline() {
         }
         stats.enrichedSuccessfully++;
 
+        // Helper to clean numeric input
+        const cleanNumber = (val) => {
+            if (val === null || val === undefined || val === "") return null;
+            // Remove '$', ',', 'M', 'k' etc if you want to be robust, 
+            // but for now just safely handle empty string.
+            // If val is a string and empty, return null.
+            if (typeof val === 'string' && val.trim() === '') return null;
+            return val;
+        };
+
         const company = enriched?.company ?? null;
-        const amount = enriched?.funding_amount ?? enriched?.amount ?? null;
+        let rawAmount = enriched?.funding_amount ?? enriched?.amount ?? null;
+        const amount = cleanNumber(rawAmount);
+
+        console.log(`DEBUG: rawAmount="${rawAmount}" cleanedAmount="${amount}"`);
 
         // 5) Filter by signal quality
         // Only keep: funding, acquisition, partnership, hiring, product_launch
