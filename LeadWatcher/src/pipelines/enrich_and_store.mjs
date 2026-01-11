@@ -15,14 +15,20 @@ import { analyzeHeadline } from "../enrichment/analyze_lead.mjs";
  */
 
 // --- Supabase client (keep it boring and reliable) ---
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
+const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || "").trim();
 
 // Validates that we have the URL AND (at least one of the keys)
 if (!SUPABASE_URL || (!SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_ANON_KEY)) {
+    const debugInfo = {
+        urlLen: SUPABASE_URL.length,
+        serviceKeyLen: SUPABASE_SERVICE_ROLE_KEY.length,
+        anonKeyLen: SUPABASE_ANON_KEY.length
+    };
+    console.error("Debug Info (lengths):", JSON.stringify(debugInfo));
     throw new Error(
-        "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY/ANON_KEY in .env"
+        "Missing or empty SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY/ANON_KEY in .env (check for whitespace)"
     );
 }
 
