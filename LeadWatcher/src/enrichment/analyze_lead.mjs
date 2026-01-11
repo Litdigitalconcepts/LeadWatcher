@@ -2,17 +2,20 @@
 import { OpenRouterChat } from "./openrouter_client.mjs";
 
 function coerceAmountToNumber(amountRaw) {
-    if (amountRaw == null) return null;
+    if (amountRaw == null || amountRaw === "") return null;
 
-    const s = String(amountRaw).trim().toUpperCase();
+    // Remove whitespace and convert to string
+    let s = String(amountRaw).trim().toUpperCase();
 
-    // Digits only -> number
-    if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+    // If it's already a clean number, return it
+    if (/^\d+$/.test(s)) return Number(s);
 
-    // Remove currency symbols/commas: $40,000,000 -> 40000000
-    const cleaned = s.replace(/[$€£,]/g, "");
+    // Clean currency symbols and commas: "$10,000,000" -> "10000000"
+    // Also handle possible LLM artifacts like "USD" or "APPROX"
+    const cleaned = s.replace(/[$€£,]|USD|APPROX/gi, "").trim();
 
-    const m = cleaned.match(/(\d+(\.\d+)?)\s*(B|BILLION|M|MILLION|K|THOUSAND)?/);
+    // Match number followed by optional unit suffix
+    const m = cleaned.match(/^(\d+(\.\d+)?)\s*(B|BILLION|M|MILLION|K|THOUSAND)?$/);
     if (!m) return null;
 
     const value = Number(m[1]);
@@ -28,6 +31,22 @@ function coerceAmountToNumber(amountRaw) {
     return Math.round(value * mult);
 }
 
+/**
+ * Validation guardrail: Reject suspiciously small amounts for funding events.
+ * A "Series A" or similar venture round is rarely below $100k,
+ * but seed/grants can be smaller. We'll set a soft floor at $10k.
+ */
+function validateFundingAmount(amount, eventType) {
+    if (eventType !== "funding") return true;
+    if (amount === null) return true;
+
+    if (amount < 10000) {
+        console.warn(`⚠️  Validation Alert: Suspiciously small funding amount extracted ($${amount}). Manual review suggested.`);
+        return false;
+    }
+    return true;
+}
+
 function normalizeSentiment(sentimentRaw) {
     const s = String(sentimentRaw || "").trim().toLowerCase();
     if (["positive", "neutral", "negative"].includes(s)) return s;
@@ -37,23 +56,30 @@ function normalizeSentiment(sentimentRaw) {
 function extractJsonObject(text) {
     if (!text) return null;
 
-    // Remove ```json ... ``` fences
-    const unfenced = text.replace(/```json|```/gi, "").trim();
+    // 1. Strip markdown code fences if present (Try: Attempt to parse the LLM response...)
+    let jsonString = text.replace(/```json|```/gi, "").trim();
 
-    // Try direct parse first
+    // 2. Attempt direct parse
     try {
-        return JSON.parse(unfenced);
-    } catch {
-        // Intentionally empty - we'll try the fallback regex approach
-    }
+        return JSON.parse(jsonString);
+    } catch (e1) {
+        // 3. Catch: If parsing fails, try fallback or log error.
+        // Fallback: search for first `{...}` block in case there's extra text
+        const match = jsonString.match(/\{[\s\S]*\}/);
+        if (match) {
+            try {
+                return JSON.parse(match[0]);
+            } catch (e2) {
+                // Fallback parse also failed
+                console.error("Failed to parse JSON (fallback failed):", e2.message);
+                console.error("Raw string that caused failure:", text);
+                return null;
+            }
+        }
 
-    // Fallback: grab the first {...} block
-    const match = unfenced.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-
-    try {
-        return JSON.parse(match[0]);
-    } catch {
+        // No JSON-like bracket structure found, or simple parse failed and no fallback possible
+        console.error("Failed to parse JSON:", e1.message);
+        console.error("Raw string that caused failure:", text);
         return null;
     }
 }
@@ -65,12 +91,15 @@ export async function analyzeHeadline(headline) {
             content: [
                 "You extract structured lead data from startup funding headlines.",
                 "Return ONLY valid JSON with exactly these keys:",
-                '  company (string), amount (string digits in USD, no symbols), sentiment ("positive"|"neutral"|"negative"), event_type (string).',
-                "Rules:",
-                "- If amount is unknown, set amount to null.",
-                '- Sentiment should be positive for funding raises, neutral for factual announcements, negative for layoffs/shutdowns.',
-                '- event_type must be one of: "funding", "acquisition", "partnership", "hiring", "product_launch", "other".',
-                "- Do not include extra keys.",
+                '  company (string), amount (integer string, raw digits ONLY, e.g. "40000000"), sentiment ("positive"|"neutral"|"negative"), event_type (string).',
+                "Rules for 'amount':",
+                "- ALWAYS return the full numeric value as a string of digits.",
+                '- EXAMPLE: "$40M" -> "40000000", "$10,000,000" -> "10000000", "£500k" -> "500000" .',
+                "- If the exact amount is unknown, set amount to null.",
+                "Rules for other fields:",
+                '- Sentiment: positive for funding/acquisition, neutral for info, negative for layoffs.',
+                '- event_type: "funding", "acquisition", "partnership", "hiring", "product_launch", "other".',
+                "- Do not include any extra text or markdown outside the JSON object.",
             ].join("\n"),
         },
         {
@@ -80,8 +109,6 @@ export async function analyzeHeadline(headline) {
     ];
 
     // Call OpenRouter (OpenAI-compatible)
-    // IMPORTANT: model must be an OpenRouter model slug, e.g. "deepseek/deepseek-chat"
-    // If you set your openrouter_client.mjs default model, you can omit this.
     const data = await OpenRouterChat({
         messages,
         model: "deepseek/deepseek-chat",
@@ -90,15 +117,13 @@ export async function analyzeHeadline(headline) {
         temperature: 0.1,
     });
 
-    // OpenRouter returns OpenAI-style: choices[0].message.content
+    console.log("\n===== DEBUG: RAW LLM RESPONSE START =====");
+    console.log(JSON.stringify(data, null, 2));
+    console.log("===== DEBUG: RAW LLM RESPONSE END =====\n");
+
     const content = data?.choices?.[0]?.message?.content;
-    console.log("\n===== RAW LLM OUTPUT START =====\n");
-    console.log(content);
-    console.log("\n===== RAW LLM OUTPUT END =====\n");
     if (!content) {
-        throw new Error(
-            `No content returned from OpenRouter. Raw response: ${JSON.stringify(data)}`
-        );
+        throw new Error(`No content returned from OpenRouter.`);
     }
 
     const parsed = extractJsonObject(content);
@@ -108,14 +133,20 @@ export async function analyzeHeadline(headline) {
     }
 
     const funding_amount = coerceAmountToNumber(parsed.amount);
-    console.log("FINAL funding_amount to insert:", funding_amount);
+    const event_type = parsed.event_type || "other";
+
+    // Apply validation guardrail
+    const isValid = validateFundingAmount(funding_amount, event_type);
+
+    console.log("FINAL funding_amount to insert:", funding_amount, isValid ? "" : "(FLAGGED)");
 
     return {
         company: parsed.company ?? null,
         amount: String(funding_amount ?? ""),
         funding_amount: funding_amount ?? null,
         sentiment: normalizeSentiment(parsed.sentiment),
-        event_type: parsed.event_type || "other",
+        event_type: event_type,
+        is_valid_amount: isValid,
     };
 }
 
@@ -123,7 +154,7 @@ export async function analyzeHeadline(headline) {
 import { pathToFileURL } from "url";
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-    const sampleHeadline = "Vercel raises $40M";
+    const sampleHeadline = process.argv[2] || "Vercel raises $40M";
 
     analyzeHeadline(sampleHeadline)
         .then((result) => {
