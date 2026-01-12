@@ -15,25 +15,43 @@ import { analyzeHeadline } from "../enrichment/analyze_lead.mjs";
  */
 
 // --- Supabase client (keep it boring and reliable) ---
-const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
-const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || "").trim();
+function safeEnv(key) {
+    const val = process.env[key] || "";
+    // Aggressive cleaning: trim + remove quotes (both single and double)
+    return val.trim().replace(/["']/g, "");
+}
 
-// Validates that we have the URL AND (at least one of the keys)
-if (!SUPABASE_URL || (!SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_ANON_KEY)) {
+const SUPABASE_URL = safeEnv("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = safeEnv("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_ANON_KEY = safeEnv("SUPABASE_ANON_KEY");
+
+// Use whatever key is available
+const activeKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+
+// Validation
+if (!SUPABASE_URL || !activeKey) {
     const debugInfo = {
         urlLen: SUPABASE_URL.length,
         serviceKeyLen: SUPABASE_SERVICE_ROLE_KEY.length,
-        anonKeyLen: SUPABASE_ANON_KEY.length
+        anonKeyLen: SUPABASE_ANON_KEY.length,
+        activeKeyStartsEy: activeKey.startsWith("ey")
     };
     console.error("Debug Info (lengths):", JSON.stringify(debugInfo));
     throw new Error(
-        "Missing or empty SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY/ANON_KEY in .env (check for whitespace)"
+        "Missing or empty SUPABASE_URL or keys in .env (check for whitespace/quotes)"
     );
 }
 
+// Security Check: Supabase keys are JWTs and almost always start with "ey"
+if (!activeKey.startsWith("ey")) {
+    console.error(`ERROR: Supabase Key seems malformed. Length: ${activeKey.length}, Starts with: ${activeKey.substring(0, 5)}...`);
+    throw new Error("Supabase Key appears malformed (does not start with 'ey'). Check GitHub Secrets.");
+}
+
+console.log(`Supabase Config Base: URL length=${SUPABASE_URL.length}, Key length=${activeKey.length}`);
+
 // Uses Service Role if available, otherwise falls back to Anon Key
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, activeKey);
 
 // --- tiny utility: delay to avoid 429s (rate limiting) ---
 function sleep(ms) {
